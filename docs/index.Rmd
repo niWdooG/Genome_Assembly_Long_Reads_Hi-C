@@ -1415,4 +1415,5 @@ Ch_2
 # Acknowledgements
 <span style="color:black">
 <p class="text-justify">I would like to express my gratitude to [Dr Guillem Ylla](https://ylla-lab.github.io/), the head of the laboratory of Bioinformatics and Genome Biology at the Jagiellonian University (Kraków, Poland), for providing the assistance, feedback and computing resources for this tutorial.</p>
-![](https://visitor-badge.deta.dev/badge?page_id=http://github.com/niwdoog/Genome_Assembly_Long_Reads_Hi-C)
+[![DOI](https://zenodo.org/badge/543131281.svg)](https://zenodo.org/badge/latestdoi/543131281)
+![](https://visitor-badge.deta.dev/badge?page_id=https://niwdoog.github.io/Genome_Assembly_Long_Reads_Hi-C/)

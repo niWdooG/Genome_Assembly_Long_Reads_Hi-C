@@ -60,6 +60,9 @@ After completing this tutorial you will be able to:
 Bioinformatics, ONT sequencing, HiFi sequencing, Illumina sequencing, Hi-C sequencing, RNA sequencing, genome assembly, genome annotation, data visualisation.
 </span>
 
+## DOI
+[![DOI](https://zenodo.org/badge/543131281.svg)](https://zenodo.org/badge/latestdoi/543131281)
+
 # [II] Software & sequencing data
 ## Note for Windows users
 <span style="color:black">

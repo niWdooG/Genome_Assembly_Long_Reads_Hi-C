@@ -1,0 +1,1418 @@
+---
+title:  "Tutorial: genome assembly and annotation of *Arabidopsis thaliana* using ONT, HiFi, Illumina and Hi-C data"
+author: <p class="text-right"><font size="1">Created by </font>[<font size="2">Evgenii Baiakhmetov</font>](https://www.researchgate.net/profile/Evgenii-Baiakhmetov)</p>
+output: 
+  html_document: 
+    theme: journal
+    highlight: monochrome
+    toc: true
+    toc_float: true
+
+---
+<style type="text/css">
+#TOC {
+  color: black; 
+}
+</style>
+
+<style>
+.list-group-item.active, .list-group-item.active:focus, .list-group-item.active:hover {
+    background-color: #25a4be;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r klippy, echo=FALSE, include=TRUE}
+klippy::klippy('')
+```
+
+# [I] Preface
+## In a nutshell
+<span style="color:black">
+<p class="text-justify">The first genome of *Arabidopsis thaliana* was sequenced back in 2000 by [the Arabidopsis Genome Initiative](https://doi.org/10.1038/35048692). The length of this assembled genome was **115,409,949** bp (at least 10% occupied by transposable elements) and contained 25,498 genes. Nonetheless, an approximate genome length is to be evaluated as [**134,634,692 bp**](https://www.arabidopsis.org/portals/genAnnotation/gene_structural_annotation/agicomplete.jsp).</p>
+
+<p class="text-justify">This short tutorial covers some basic analyses aiming to perform a chromosome-level scaffolding and annotation of a diploid plant (2n=2x=10) *A. thaliana* using primarily data produced by third generation sequencing.
+<div class="alert alert-info">
+<span style="color:black">
+Please note, all data used here was produced by [Wang B et al., 2021](https://doi.org/10.1016/j.gpb.2021.08.003). Please also take into account that this tutorial does not intend to reproduce all analyses from the above-mentioned article in detail.
+</span>
+</div>
+</p>
+
+## Learning outcomes
+<span style="color:black">
+After completing this tutorial you will be able to:
+
+* <span style="color:black">assemble a genome of your interest using data produced by third generation sequencing, i.e., [Oxford Nanopore Technologies (ONT)](https://nanoporetech.com/) and [Pacific Biosciences](https://www.pacb.com/) Circular Consensus Sequencing ([CCS](https://www.pacb.com/technology/hifi-sequencing/)) reads.</span>
+* <span style="color:black">scaffold assembled contigs to the scale of full chromosomes using a reference genome.</span>
+* <span style="color:black">scaffold assembled contigs to the scale of full chromosomes using Hi-C data.</span>
+* <span style="color:black">fill sequencing gaps if necessary (pending).</span>
+* <span style="color:black">identify, annotate and mask transposable elements.</span>
+* <span style="color:black">annotate genomes using RNA-Seq and protein homology information.</span>
+* <span style="color:black">visualise the results.</span>
+</span>
+
+## Keywords
+<span style="color:black">
+Bioinformatics, ONT sequencing, HiFi sequencing, Illumina sequencing, Hi-C sequencing, RNA sequencing, genome assembly, genome annotation, data visualisation.
+</span>
+
+# [II] Software & sequencing data
+## Note for Windows users
+<span style="color:black">
+<p class="text-justify">The tutorial is supposed to be run under a Unix operating system. For Windows users, I propose to use a combination of [PuTTY](https://www.putty.org/)/[Visual Studio Code (VSC)](https://code.visualstudio.com/) to access a server/cluster and [WinSCP](https://winscp.net/eng/download.php) to transfer files between Windows and Unix. Alternatively, you may install Unix in a virtual machine, e.g., [Ubuntu 20.04 LTS on VirtualBox](https://youtu.be/x5MhydijWmc). Personally, I use (1) PuTTY to access a server, (2) VSC to remotely open GUI applications and (3) WinSCP to transfer files (see **Figure 1**). Please note, you can also [open GUI applications with PuTTY](https://youtu.be/5nJtIXWMdYg).</p>
+</span>
+
+![(See Figure 1)](C:\Users\Evgenii\Desktop\Tutorial\Figure_1.jpg)<br/>
+
+<p class="text-center">**Figure 1**. Top left - PuTTY interface, top right - WinSCP interface and bottom - VSC interface.</p>
+
+## Specs of the server
+* <span style="color:black">**Operating system**: Ubuntu 20.04.3 LTS.</span>
+* <span style="color:black">**Kernel**: Linux 5.13.19-1-pve.</span>
+* <span style="color:black">**Architecture**: x86-64.</span>
+* <span style="color:black">**CPU**: Intel Xeon Silver 4114 (2.20 GHz), 8 cores available (16 threads).</span>
+* <span style="color:black">**RAM**: DDR4 (2666 MHz), 128 GB.</span> 
+
+<div class="alert alert-info">
+<span style="color:black">
+Please share your experience if you were able to run all analyses on a PC.
+</span>
+</div>
+
+
+## Conda and setting an environment
+<br/><span style="color:black">
+<center>**[Step 1]**</center><br/>
+</span>
+Let's download [Anaconda (a package manager)](https://anaconda.org/):<br/>
+`nohup wget https://repo.anaconda.com/archive/Anaconda3-2021.11-Linux-x86_64.sh > conda_download.out &`<br/>
+
+<p class="text-justify">Please notice that we will frequently use a combination of `nohup` at the beginning and `&` (the ampersand sign) at the end of the command. This combination keeps you in the current shell (bash/zsh) and you are able to run another process. To sum up:</p>
+<div class="alert alert-success">
+<span style="color:black">
+`nohup` keeps your process running even after exiting the shell.<br/>
+`wget`is a package for retrieving files via HTTP, HTTPS and FTP.<br/>
+`https://repo.anaconda.com/archive/Anaconda3-2021.11-Linux-x86_64.sh` is a downloadable file.<br/>
+`>` redirects a standard output to a file.<br/> 
+`conda_download.out` is a redirected output.<br/>
+`&` runs a process in the background using a subshell.<br/> 
+</span>
+</div>
+
+<center>**[Step 2]**</center><br/>
+Next, we need to install [Anaconda (it comes with Conda)](https://towardsdatascience.com/get-your-computer-ready-for-machine-learning-how-what-and-why-you-should-use-anaconda-miniconda-d213444f36d6):<br/>
+
+`bash Anaconda3-2021.11-Linux-x86_64.sh`<br/>
+
+<center>**[Step 3]**</center><br/>
+We may also need to update conda:<br/>
+
+`conda update --all`<br/>
+`conda update conda`<br/>
+
+Additionally, let's add channels to conda for searching packages:<br/>
+
+`conda config --add channels defaults`<br/>
+`conda config --add channels bioconda`<br/>
+`conda config --add channels conda-forge`<br/>
+
+<center>**[Step 4]**</center><br/>
+
+Now, it is time to create an environment where we will keep all required programs:<br/>
+`conda create -n Assembly_tutorial python=3.9`<br/>
+<div class="alert alert-success">
+<span style="color:black">
+`conda` calls the 'conda' tool itself.<br/>
+`create` a command to create an environment.<br/>
+`-n` a name flag.<br/>
+`Assembly_tutorial` a name of your environment.<br/> 
+`python=3.9` creates an environment with a specific version of Python.<br/>
+</span>
+</div>
+
+<center>**[Step 5]**</center><br/>
+
+Now, to access the newly created environment we have to type:<br/>
+`conda activate Assembly_tutorial`<br/>
+
+If you want to deactivate your environment, type:<br/>
+`conda deactivate`<br/>
+
+If you have several environments, but forgot their names, use:<br/>
+`conda info --envs`<br/>
+`conda activate NAME_OF_YOUR_ENVIRONMENT`<br/>
+
+## Packages installation
+<span style="color:black">
+`sudo apt install htop` is [an interactive process viewer](https://www.tecmint.com/htop-linux-process-monitoring/#:~:text=Htop%20is%20an%20interactive%20real,on%20all%20Linux%20operating%20systems.).<br/>
+`pip install paralleltask` is [a parallel task engine](https://pypi.org/project/Paralleltask/).<br/>
+`conda install -c conda-forge gnu-coreutils=9.1` provides [basic utilities](https://www.gnu.org/software/coreutils/) of the GNU operating system.<br/>
+`conda install -c bioconda flye=2.9` is [a *de novo* assembler](https://github.com/fenderglass/Flye) for single-molecule sequencing reads.<br/>
+`conda install -c bioconda necat=0.0.1_update20200803` is [an error correction and *de novo* assembly tool](https://github.com/xiaochuanle/NECAT) for long reads.<br/>
+`conda install -c bioconda 3d-dna=201008` is [a 3D *de novo* assembly (3D DNA) pipeline](https://github.com/aidenlab/3d-dna/tree/201008).<br/>
+`conda install -c bioconda assembly-stats=1.0.1` provides [assembly statistics](https://github.com/sanger-pathogens/assembly-stats) from FASTA and FASTQ files.<br/>
+`conda install -c bioconda minimap2=2.24` is [a versatile pairwise aligner](https://github.com/lh3/minimap2) for genomic and spliced nucleotide sequences.<br/>
+`conda install -c bioconda spoa=4.0.7` is [a partial order alignment algorithm](https://github.com/rvaser/spoa).<br/>
+`conda install -c bioconda fastp=0.23.2` is [a tool](https://github.com/OpenGene/fastp) designed to provide fast all-in-one preprocessing for FastQ files.<br/> 
+`conda install -c bioconda fastqc=0.11.9` is [a quality control tool](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) for high throughput sequence data.<br/> 
+`conda install -c bioconda samtools=1.15.1` is [a set of tools](https://github.com/samtools/samtools) for manipulating next-generation sequencing data.<br/>
+`conda install -c bioconda blast=2.12.0` is [a new suite of BLAST tools](https://blast.ncbi.nlm.nih.gov/Blast.cgi?PAGE_TYPE=BlastDocs) that utilizes the NCBI C++ Toolkit.<br/>
+`conda install -c bioconda seqtk=1.3` is [a fast and lightweight tool](https://github.com/lh3/seqtk) for processing sequences in the FASTA or FASTQ format.<br/>
+`conda install -c bioconda bwa=0.7.17` is [a Burrow-Wheeler Aligner](https://github.com/lh3/bwa) for short-read alignments.<br/>
+`conda install -c bioconda dgenies=1.3.1` is [a dot plot tool](https://github.com/genotoul-bioinfo/dgenies) designed to compare two genomes.<br/>
+`conda install -c bioconda kmer-jellyfish=2.3.0` is [a tool](https://github.com/gmarcais/Jellyfish) for fast, memory-efficient counting of k-mers in DNA.<br/>
+`conda install -c bioconda repeatmodeler=2.0.3` is [a *de novo* repeat family identification and modeling package](https://github.com/Dfam-consortium/RepeatModeler).<br/>
+`conda install -c bioconda repeatmasker=4.1.2.p1` is [a program](http://www.repeatmasker.org/) that screens DNA sequences for transposable elements.<br/>
+`conda install -c bioconda braker2=2.1.6` is [a pipeline](https://github.com/Gaius-Augustus/BRAKER) for fully automated prediction of protein coding gene structures.<br/>
+`conda install -c bioconda/label/cf201901 sra-tools=2.11.0` is [a collection of tools and libraries](https://github.com/ncbi/sra-tools) for using SRA data.<br/>
+`conda install -c bioconda trim-galore=0.6.7` is [a wrapper script](https://github.com/FelixKrueger/TrimGalore) to automate quality, adapter trimming and  quality control.<br/>
+`conda install -c bioconda/label/cf201901 hisat2=2.2.1` is [an alignment program](https://github.com/DaehwanKimLab/hisat2) for mapping reads to a reference genome.<br/>
+`conda install -c bioconda/label/cf201901 busco=5.3.2` provides measures for [quantitative assessment of genome assemblies](https://busco.ezlab.org/).<br/>
+`conda install -c bioconda igv=2.13.1` is [a visualisation tool](https://software.broadinstitute.org/software/igv/home) for genomics data and annotations.<br/>
+`conda install -c bioconda/label/cf201901 circos=0.69.8` is [a package](http://circos.ca/) for visualising data in a circular layout.<br/>
+`conda install -c conda-forge gawk=5.1.0` this [utility](https://www.gnu.org/software/gawk/) makes it easy to handle simple data-reformatting jobs.<br/>
+`conda install -c conda-forge ncurses=6.3` is [a free software emulation](https://invisible-island.net/ncurses/announce.html) of curses in System V Release 4.0 (SVr4) and more.<br/>
+`conda install -c bioconda qualimap=2.2.2d` [evaluates](http://qualimap.conesalab.org/) next generation sequencing alignment data.<br/>
+`conda install -c bioconda quast=5.2.0` provides [tools](http://quast.sourceforge.net/) for genome assemblies evaluation and comparison.<br/>
+`conda install -c bioconda syri=1.6` is a synteny and rearrangement [identifier](https://github.com/schneebergerlab/syri) between whole-genome assemblies.<br/>
+`conda install -c bioconda plotsr=0.5.4` is a [visualiser](https://github.com/schneebergerlab/plotsr) for structural annotations between multiple genomes.<br/>
+
+<div class="alert alert-info">
+<span style="color:black">
+Please note, you may ignore some conda packages; however, there is also a possibility that you may need to install some additional packages.<br/>
+</span>
+</div>
+
+## Additional software (not in Conda)
+
+* <span style="color:black">[NextDenovo](https://github.com/Nextomics/NextDenovo) is a fast and accurate *de novo* assembler for long reads.
+
+* <span style="color:black">[Juicer 1.6](https://github.com/aidenlab/juicer/releases/tag/1.6) is a one-click system for analysing loop-resolution Hi-C experiments. The installation process is [here](https://github.com/aidenlab/juicer/wiki/Installation#dependencies).
+
+* <span style="color:black">[Juicebox](https://github.com/aidenlab/Juicebox/wiki/Download) is a visualisation and analysis software for Hi-C data.
+
+* <span style="color:black">[GeneMark-ES/ET/EP v. 4.69_lic](http://topaz.gatech.edu/genemark/license_download.cgi) (it should also contain ProtHint v. 2.6.0) is a part of [Braker2 pipelines](https://github.com/Gaius-Augustus/BRAKER).
+
+* <span style="color:black">[TSEBRA](https://github.com/Gaius-Augustus/TSEBRA) is a transcript selector software for BRAKER2.
+
+## Downloading raw sequence data
+<span style="color:black">
+Please try to organise your files in a proper way. For instance, let's create a new folder for your downloads:<br/>
+`mkdir Downloads`<br/>
+
+<span style="color:black">
+Open the newly created folder:<br/>
+`cd Downloads`<br/>
+
+<span style="color:black"><p class="text-justify">And download two reference genomes of *A. thaliana* (the first one produced by [Wang B et al., 2021](https://doi.org/10.1016/j.gpb.2021.08.003) and the second one that was submitted to the GenBank by [The Arabidopsis Information Resource (TAIR)](https://www.ncbi.nlm.nih.gov/assembly/GCF_000001735.4/):</p>
+<font size="3.5">`nohup wget https://download.cncb.ac.cn/gwh/Plants/Arabidopsis_thaliana_AT_GWHBDNP00000000/GWHBDNP00000000.genome.fasta.gz &`<br/></font>
+<font size="3.5">`nohup wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/plant/Arabidopsis_thaliana/latest_assembly_versions/GCF_000001735.4_TAIR10.1/GCF_000001735.4_TAIR10.1_genomic.fna.gz &`<br/></font>
+
+Then, unzip these archives:<br/>
+`gzip -d GWHBDNP00000000.genome.fasta.gz`<br/>
+`gzip -d GCF_000001735.4_TAIR10.1_genomic.fna.gz`<br/>
+
+Next, we will create some more folders for Illumina, Hi-C, Hi-Fi, ONT and RNAseq data:<br/>
+`mkdir Illumina`<br/>
+`mkdir HiC`<br/>
+`mkdir HiFi`<br/>
+`mkdir ONT`<br/>
+`mkdir RNAseq`<br/>
+
+Subsequently, we have to download the following files:<br/>
+`cd Illumina`<br/>
+`nohup wget ftp://download.big.ac.cn/gsa/CRA004538/CRR302670/CRR302670_f1.fastq.gz > CRR302670_f1.out &`<br/>
+`nohup wget ftp://download.big.ac.cn/gsa/CRA004538/CRR302670/CRR302670_r2.fastq.gz > CRR302670_r2.out &`<br/>
+`cd -` it will navigate you to the previous directory `Downloads`<br/>
+
+`cd HiC`<br/>
+`nohup wget ftp://download.big.ac.cn/gsa/CRA004538/CRR302669/CRR302669_f1.fastq.gz > CRR302669_f1.out &`<br/>
+`nohup wget ftp://download.big.ac.cn/gsa/CRA004538/CRR302669/CRR302669_r2.fastq.gz > CRR302669_r2.out &`<br/>
+`cd -`  
+   
+`cd HiFi`<br/>
+`nohup wget ftp://download.big.ac.cn/gsa/CRA004538/CRR302668/CRR302668.fastq.gz > CRR302668.out &`<br/>
+`cd -`   
+    
+`cd ONT`<br/>
+`nohup wget ftp://download.big.ac.cn/gsa/CRA004538/CRR302667/CRR302667.fastq.gz > CRR302667.out &`<br/>
+`cd -`      
+
+`cd RNAseq`<br/>
+`nohup wget https://sra-pub-run-odp.s3.amazonaws.com/sra/SRR3581356/SRR3581356 > wget_SRR3581356.out &` root<br/>
+`nohup wget https://sra-pub-run-odp.s3.amazonaws.com/sra/SRR3581693/SRR3581693 > wget_SRR3581693.out &` flower<br/>
+`nohup wget https://sra-pub-run-odp.s3.amazonaws.com/sra/SRR3581681/SRR3581681 > wget_SRR3581681.out &` leaf<br/>
+`nohup wget https://sra-pub-run-odp.s3.amazonaws.com/sra/SRR3581705/SRR3581705 > wget_SRR3581705.out &` internode<br/>
+`nohup wget https://sra-pub-run-odp.s3.amazonaws.com/sra/SRR3581706/SRR3581706 > wget_SRR3581706.out &` seed<br/>
+`nohup wget https://sra-pub-run-odp.s3.amazonaws.com/sra/SRR3581708/SRR3581708 > wget_SRR3581708.out &` silique<br/>
+`nohup wget https://sra-pub-run-odp.s3.amazonaws.com/sra/SRR3581703/SRR3581703 > wget_SRR3581703.out &` pedicel<br/>
+`cd -` 
+
+<div class="alert alert-info">
+<span style="color:black">
+Please also consider to use [soft links](https://www.cyberciti.biz/faq/creating-soft-link-or-symbolic-link/) for these files. For example, one may create a new folder `Assembly` and create a soft/symbolic link there:
+</span>
+</div>
+`cd` redirect to the home directory.<br/>
+`mkdir Assembly` create a new folder.<br/>
+`cd Assembly` open the folder.<br/>
+`ln -s /home/Downloads/ONT/CRR302667.fastq.gz CRR302667.fastq.gz` create a symbolic link for ONT reads.<br/>
+`ls` will list all files in this directory.<br/>
+
+# [III] Genome assembly
+
+## [Step 1 | NECAT]
+<span style="color:black">
+We will correct the ONT reads with [NECAT](https://github.com/xiaochuanle/NECAT):<br/>
+
+<span style="color:black">
+`cd /home/Downloads/ONT/` move to the `ONT` folder.<br/> 
+`cat > read_list.txt` create a .txt file `read_list`.<br/> 
+`/home/Downloads/ONT/CRR302667.fastq.gz` type a path to the ONT reads and press `CTRL`+`D` to save `read_list.txt`.<br/>
+`necat config arabidopsis_config.txt` create a config file template.<br/>
+`nano arabidopsis_config.txt` modify the config file with the relative information, e.g.:<br/>
+
+<div class="alert alert-success">
+<font size="2">
+<span style="color:black">
+PROJECT=Arabidopsis<br/>
+ONT_READ_LIST=read_list.txt<br/>
+GENOME_SIZE=135000000<br/>
+THREADS=16<br/>
+MIN_READ_LENGTH=10000<br/>
+PREP_OUTPUT_COVERAGE=40<br/>
+OVLP_FAST_OPTIONS=-n 500 -z 20 -b 2000 -e 0.5 -j 0 -u 1 -a 1000<br/>
+OVLP_SENSITIVE_OPTIONS=-n 500 -z 10 -e 0.5 -j 0 -u 1 -a 1000<br/>
+CNS_FAST_OPTIONS=-a 2000 -x 4 -y 12 -l 1000 -e 0.5 -p 0.8 -u 0<br/>
+CNS_SENSITIVE_OPTIONS=-a 2000 -x 4 -y 12 -l 1000 -e 0.5 -p 0.8 -u 0<br/>
+TRIM_OVLP_OPTIONS=-n 100 -z 10 -b 2000 -e 0.5 -j 1 -u 1 -a 400<br/>
+ASM_OVLP_OPTIONS=-n 100 -z 10 -b 2000 -e 0.5 -j 1 -u 0 -a 400<br/>
+NUM_ITER=2<br/>
+CNS_OUTPUT_COVERAGE=30<br/>
+CLEANUP=1<br/>
+USE_GRID=false<br/>
+GRID_NODE=0<br/>
+GRID_OPTIONS=<br/>
+SMALL_MEMORY=0<br/>
+FSA_OL_FILTER_OPTIONS=<br/>
+FSA_ASSEMBLE_OPTIONS=<br/>
+FSA_CTG_BRIDGE_OPTIONS=<br/>
+POLISH_CONTIGS=true.<br/>
+</span>
+</font>
+</div>
+
+<span style="color:black">After modifying `arabidopsis_config.txt`, press `CTRL`+`O` to save the file and `CTRL`+`X` to exit the editing mode. Alternatively, if you are not familiar with Unix, you can modify `arabidopsis_config.txt` via 
+[VSC](https://code.visualstudio.com/) or [WinSCP](https://winscp.net/eng/download.php).<br/>
+
+<div class="alert alert-info">
+<span style="color:black">
+Please note, we will keep only the longest 30x corrected reads for the downstream assembly.<br/>
+</span>
+</div>
+
+## [Step 2 | NextDenovo]
+<span style="color:black">
+We will use [NextDenovo](https://github.com/Nextomics/NextDenovo) to assemble the genome.
+
+<span style="color:black">`cd Assembly` move to the `Assembly` folder<br/>
+`ln /home/Downloads/ONT/Arabidopsis/1-consensus/cns_final.fasta.gz > input.fofn` prepare an input file with the corrected ONT reads and update `run.cfg`, e.g.:<br/>
+
+<div class="alert alert-success">
+<font size="2">
+<span style="color:black">
+**[General]**<br/>
+job_type = local # local, slurm, sge, pbs, lsf<br/>
+job_prefix = nextDenovo<br/>
+task = assemble # all, correct, assemble<br/>
+rewrite = yes # yes/no<br/>
+deltmp = yes <br/>
+parallel_jobs = 16 # number of tasks used to run in parallel<br/>
+input_type = corrected # raw, corrected<br/>
+read_type = ont # clr, ont, hifi<br/>
+input_fofn = input.fofn<br/>
+workdir = /home/Assembly/<br/>
+<span style="color:black">
+**[correct_option]**<br/>
+read_cutoff = 5k<br/>
+genome_size = 135m # estimated genome size<br/>
+sort_options = -m 10g -t 10<br/>
+minimap2_options_raw = -t 8<br/>
+pa_correction = 3 # number of corrected tasks used to run in parallel, each corrected task requires ~TOTAL_INPUT_BASES/4 bytes of memory usage.<br/>
+correction_options = -p 15<br/>
+<span style="color:black">
+**[assemble_option]**<br/>
+minimap2_options_cns = -t 8<br/>
+nextgraph_options = -a 1
+</span>
+</font>
+</div>
+
+<span style="color:black">
+`nohup nextDenovo run.cfg &` run the program.<br/>
+`assembly-stats /home/Assembly/nextDenovo/03.ctg_graph/01.ctg_graph.sh.work/ctg_graph1/nd.asm.p.fasta > NextDenovo_ONT_corr_30x.txt` get a brief overview of the assembly:<br/>
+
+<div class="alert alert-success">
+<font size="2">
+<span style="color:black">
+stats for nd.asm.p.fasta<br/>
+sum = 122664679, n = 15, ave = 8177645.27, largest = 16219875<br/>
+N50 = 15030013, n = 4<br/>
+N60 = 14767803, n = 5<br/>
+N70 = 13827629, n = 6<br/>
+N80 = 11316166, n = 7<br/>
+N90 = 9383066, n = 8<br/>
+N100 = 251324, n = 15<br/>
+N_count = 0<br/>
+Gaps = 0<br/>
+</span>
+</font>
+</div>
+<div class="alert alert-info">
+<span style="color:black">
+Please note, a similar result may be obtained with [the Flye assembler](https://github.com/fenderglass/Flye). Particularly, I got an assembly with the total length of 118,548,372 bp represented by 19 fragments. The subsequent BLASTing against chloroplast and mitochondrial genomes revealed a similarity to three contigs. In addition, one contig was too short (707 bp). Thus, the final nuclear genome assembly contained 15 fragments with the total length of 118,420,125 bp.</div>
+
+## [Step 3 | Remove contaminants]
+<span style="color:black">
+`ln -s /home/Assembly/nextDenovo/03.ctg_graph/01.ctg_graph.sh.work/ctg_graph1/nd.asm.p.fasta Assembly_NextDenovo_ONT_15_fragments.fasta` create a soft link for the assembly.<br/> 
+`egrep 'loop' Assembly_NextDenovo_ONT_15_fragments.fasta` check if the final assembly contains circular fragments:<br/>        
+<div class="alert alert-success">
+<font size="2">
+<span style="color:black">
+>ctg000013 type:s:loop length:i:304269 node:i:16<br/>
+>ctg000014 type:s:loop length:i:251324 node:i:7<br/>
+</font>
+</div>
+
+We will remove these fragments from the assembly. Firstly, let's create a list with the headers of all contigs:<br/>
+`egrep '>' Assembly_NextDenovo_ONT_15_fragments.fasta > name.lst` you can find some basics on grep/egrep [here](https://www.youtube.com/watch?v=KJG1dETacLI&ab_channel=JasonWertz).<br/>
+`sed 's/^.//' name.lst > name1.lst` remove `>` from the list. More on sed is [here](https://www.theunixschool.com/2014/08/sed-examples-remove-delete-chars-from-line-file.html).<br/>
+`sed '14,15d' name1.lst > 13_fragments.lst` remove two looped fragments from the list. Here is [one more useful link](https://linuxhint.com/sed-command-to-delete-a-line/#:~:text=To%20delete%20a%20line%2C%20we,will%20delete%20all%20the%20lines.).<br/>
+`seqtk subseq Assembly_NextDenovo_ONT_15_fragments.fasta 13_fragments.lst > Assembly_NextDenovo_ONT_13_fragments.fasta` extract the linear sequences from the assembly.
+
+<div class="alert alert-info">
+<span style="color:black">
+Just out of curiosity, you may extract the looped sequences in the same manner and [BLAST them](https://blast.ncbi.nlm.nih.gov/Blast.cgi?PROGRAM=blastn&PAGE_TYPE=BlastSearch&LINK_LOC=blasthome).
+</div>        
+</span>
+
+## [Step 4 | NextPolish] 
+
+<span style="color:black">
+Now we will polish our assembly with HiFi reads.<br/>
+<span style="color:black">
+`cd /home/` <br/>
+`mkdir Nextpolish` <br/>
+`cd Nextpolish` <br/>
+`ln -s /home/Assembly/Assembly_NextDenovo_ONT_13_fragments.fasta Assembly_ONT.fasta` <br/>
+`ls /home/Downloads/HiFi/CRR302668.fastq.gz > hifi.fofn` prepare an input file with the HiFi reads and create a `run.cfg` file, e.g.:<br/ >
+
+<div class="alert alert-success">
+<font size="2">
+<span style="color:black">
+**[General]**<br/>
+job_type = local<br/>
+job_prefix = nextPolish<br/>
+task = best<br/>
+rewrite = yes<br/>
+rerun = 3<br/>
+parallel_jobs = 6<br/>
+multithread_jobs = 5<br/>
+genome = /home/Nextpolish/Assembly_ONT.fasta #genome file<br/>
+genome_size = auto<br/>
+workdir = /home/Nextpolish/<br/>
+polish_options = -p {multithread_jobs}<br/>
+**[hifi_option]**<br/>
+hifi_fofn = /home/Nextpolish/hifi.fofn<br/>
+hifi_options = -min_read_len 10k -max_read_len 45k -max_depth 150<br/>
+hifi_minimap2_options = -x map-hifi<br/>
+</span>
+</font>
+</div>    
+
+<span style="color:black">
+`nohup nextPolish run.cfg &` run the program.<br/>
+
+## [Step 5 | Scaffolding]
+### With a reference
+<span style="color:black">
+<p class="text-justify">
+Let's consider a case when we have a reference genome. We will use [D-Genies](https://github.com/genotoul-bioinfo/dgenies) that provides a synthetic similarity overview. This software can be run [locally](https://anaconda.org/bioconda/dgenies) or [online](https://dgenies.toulouse.inra.fr/run). All you need is to provide a reference and your newly assembled genome. Here, we will compare `genome.nextpolish.fasta`, which we got in the previous step, and `GWHBDNP00000000.genome.fasta.gz` that was downloaded before. In **Figure 2** you can see (A) comparisons  'Reference' vs 'Reference' and (B) 'Reference' vs 'genome.nextpolish'.</p>
+
+![(See Figure 2)](C:\Users\Evgenii\Desktop\Tutorial\Figure_2.jpg)<br/>
+
+<p class="text-center">**Figure 2**. Synthetic similarities produced by D-Genies. (A) Reference vs Reference. (B) Reference vs Polished genome.</p>
+
+<div class="alert alert-info">
+<span style="color:black">
+Notice, the first chromosome is represented by contigs 4 and 10 (shown in **Figure 2**); the second chromosome by contigs 7 and 11; the third chromosome by contigs 2 and 12; the fourth chromosome by contigs 5 and 8; the fifth chromosome by contigs 3 and 6.<br/>
+</div>        
+</span>
+
+<span style="color:black">
+<p class="text-justify">
+Now we need to order our contigs into chromosomes according to **Figure 2B**. Here is a potential scheme for Chromosome 1:<br/></p>
+`touch ctg000010.txt` create a text file.<br/>
+`nano ctg000010.txt` write the contig name `ctg000010` and save the file.<br/>
+`seqtk subseq genome.nextpolish.fasta ctg000010.txt > ctg000010.fasta` extract the contig `ctg000010` that we want to reverse.<br/>
+`seqtk seq -r ctg000010.fasta > ctg000010_REV.fasta` reverse the contig.<br/>
+`touch ctg000004.txt` create a new text file.<br/>
+`nano ctg000004.txt` write the contig name `ctg000004` and save the file.<br/>
+`seqtk subseq genome.nextpolish.fasta ctg000004.txt > ctg000004.fasta` extract the contig `ctg000004` that represents the first chromosome.<br/>
+`paste -d '' ctg000004.fasta ctg000010_REV.fasta > Chromosome_1.fasta` concatenate two contigs representing Chromosome 1.<br/>
+`nano Chromosome_1.fasta` you may want to edit the header.<br/>
+
+In the end, you should get the following result (**Figure 3**):
+
+![(See Figure 3)](C:\Users\Evgenii\Desktop\Tutorial\Figure_3.jpg)<br/>
+
+<p class="text-center">**Figure 3**. Synthetic similarities produced by D-Genies. (A) Reference vs Reference. (B) Reference vs Scaffolded genome. Red ellipses indicate the missing sequences in the centromeric regions.</p>
+<p class="text-justify">
+
+<div class="alert alert-info">
+<span style="color:black">
+Note, here we will not fill the remaining gaps in the centromeric regions. Please see an approach proposed in the original article ([Replacing ONT-HiC-assemblies with HiFi-contigs](https://www.sciencedirect.com/science/article/pii/S1672022921001741?via%3Dihub#s0030)). 
+</div>        
+</span>
+
+</p>
+### Without a reference
+<span style="color:black">
+<p class="text-justify">
+If you have genome-wide chromatin interactions data ([Hi-C](https://en.wikipedia.org/wiki/Hi-C_(genomic_analysis_technique))), you can scaffold contigs into chromosomes without a reference genome.
+</p>
+<div class="alert alert-info">
+<span style="color:black">
+You may want to know more about the workflow. Here are some useful links:<br/>
+[The Genome Assembly Cookbook](https://wixlabs-pdf-dev.appspot.com/assets/pdfjs/web/viewer.html?file=%2Fpdfproxy%3Finstance%3DMRuHq7Rbtm_dH7B5Kxt0ktj_93fQjU8G1JqRvjmpDYo.eyJpbnN0YW5jZUlkIjoiOTQwZTczNzYtYTY2My00YzA0LTlkMjctOGVlNDE4YTY5ODc3IiwiYXBwRGVmSWQiOiIxM2VlMTBhMy1lY2I5LTdlZmYtNDI5OC1kMmY5ZjM0YWNmMGQiLCJtZXRhU2l0ZUlkIjoiZjJlY2EyODAtMTQwOC00NjY5LWI5MzctYzc4ZjY4YTJiMDQ1Iiwic2lnbkRhdGUiOiIyMDIyLTA3LTE1VDE0OjM4OjQ5LjY5OVoiLCJkZW1vTW9kZSI6ZmFsc2UsImFpZCI6ImE1NGM1MmE5LTA1NDUtNDFlMi1iOGEzLTllNjgxNWEzMzQ0MSIsImJpVG9rZW4iOiI2NmUyZDFmNi1iMjZiLTBhNmQtMjQxMC00OTZiNzAwNDI4MzIiLCJzaXRlT3duZXJJZCI6IjJiOTMzMGNiLWFhMWUtNGYyOC04NjhkLWNlNGEzMDM4ZTViMCJ9%26compId%3Dcomp-jln9hwb1%26url%3Dhttps%3A%2F%2Fdocs.wixstatic.com%2Fugd%2F2b9330_fd2c3fb050d04c989fe2bb9a762c94f7.pdf&rng=1657895941130#page=1&zoom=auto,-15,800&links=true&allowPrinting=true&allowDownload=true&originalFileName=manual_180322) provides a strategy on the chromosome-length genome assemblies in detail.<br/>
+[The Aiden Lab YouTube channel](https://www.youtube.com/c/AidenLab/videos) provides a brief overview on [Juicebox Assembly Tools](https://github.com/aidenlab/Juicebox).<br/>
+</div>        
+</span>
+
+</p>
+
+#### Juicer
+
+<div class="alert alert-danger">
+<span style="color:black">
+**IMPORTANT!** You have to properly organise your directory structure for running Juicer. Please try to follow [the instruction](https://github.com/aidenlab/juicer/wiki/Installation#directory-structure).
+<br/>
+</div>        
+</span>
+
+`bwa index genome.nextpolish.fasta` builds [an index](https://www.biostars.org/p/212594/) for the genome.<br/>
+`nohup juicer.sh -D /juicer/scripts/ -g AT_2022 -z /home/juicer/references/genome.nextpolish.fasta -p contig.sizes -s none -d /home/juicer/work/AT_2022 -t 16 &` runs [Juicer](https://github.com/aidenlab/juicer).<br/>
+
+<div class="alert alert-success">
+<span style="color:black">
+`nohup` keeps your process running even after exiting the shell.<br/>
+`juicer.sh` the executed script.<br/>
+`-D` a path to the Juicer tools.<br/>
+`-g` the genomeID.<br/>
+`-z` a genome file.<br/>
+`-p` a file containing chromosome/contig sizes`*`.<br/>
+`-s` a restriction enzyme file.<br/>
+`-d` a path to the directory containing the Hi-C data (a `fastq` folder).<br/>
+`-t` a number of threads used.<br/>
+`&` runs a process in the background using a subshell.<br/>
+`*` - you may get these sizes from `genome.nextpolish.fasta.fai`:<br/>
+`cut -f1,2 genome.nextpolish.fasta.fai > contig.sizes`
+</span>
+</div>
+
+Next, we will generate a candidate assembly with 3D *de novo* assembly ([3D-DNA](https://github.com/aidenlab/3d-dna)) pipeline:<br/>   
+
+`nohup 3d-dna /home/juicer/references/genome.nextpolish.fasta /home/juicer/work/AT_2022/aligned/merged_nodups.txt &` 
+
+#### Juicebox
+
+[Open](https://www.youtube.com/watch?v=Nj7RhQZHM18&ab_channel=AidenLab) the `.final.hic` file in [Juicebox](https://github.com/aidenlab/Juicebox/wiki/Download) and load the `.final.assembly` file. You will need to [examine and rectify the assembly](https://wixlabs-pdf-dev.appspot.com/assets/pdfjs/web/viewer.html?file=%2Fpdfproxy%3Finstance%3DMRuHq7Rbtm_dH7B5Kxt0ktj_93fQjU8G1JqRvjmpDYo.eyJpbnN0YW5jZUlkIjoiOTQwZTczNzYtYTY2My00YzA0LTlkMjctOGVlNDE4YTY5ODc3IiwiYXBwRGVmSWQiOiIxM2VlMTBhMy1lY2I5LTdlZmYtNDI5OC1kMmY5ZjM0YWNmMGQiLCJtZXRhU2l0ZUlkIjoiZjJlY2EyODAtMTQwOC00NjY5LWI5MzctYzc4ZjY4YTJiMDQ1Iiwic2lnbkRhdGUiOiIyMDIyLTA3LTE1VDE0OjM4OjQ5LjY5OVoiLCJkZW1vTW9kZSI6ZmFsc2UsImFpZCI6ImE1NGM1MmE5LTA1NDUtNDFlMi1iOGEzLTllNjgxNWEzMzQ0MSIsImJpVG9rZW4iOiI2NmUyZDFmNi1iMjZiLTBhNmQtMjQxMC00OTZiNzAwNDI4MzIiLCJzaXRlT3duZXJJZCI6IjJiOTMzMGNiLWFhMWUtNGYyOC04NjhkLWNlNGEzMDM4ZTViMCJ9%26compId%3Dcomp-jln9hwb1%26url%3Dhttps%3A%2F%2Fdocs.wixstatic.com%2Fugd%2F2b9330_fd2c3fb050d04c989fe2bb9a762c94f7.pdf&rng=1657895941130#page=1&zoom=auto,-15,800&links=true&allowPrinting=true&allowDownload=true&originalFileName=manual_180322) if necessary (see **Figure 4**).
+
+![(See Figure 4)](C:\Users\Evgenii\Desktop\Tutorial\Figure_4.jpg)<br/>
+
+<p class="text-center">**Figure 4**. Scaffolding using Hi-C data. (A) The Hi-C map for the assembly obtained by scaffolding the original input scaffolds, without any editing. (B) The Hi-C map after editing.</p>
+
+<div class="alert alert-info">
+<span style="color:black">
+Notice, **Figure 4B** is not exemplary. Ideally, this assembly requires additional changes in the centromeric and telomeric regions (I did not integrate 'debris' to the final assembly).<br/>
+</div>
+</span>
+
+Save changes via the `Export Assembly` menu item in Juicebox as, e.g., `Juicebox.final.review.assembly` and run the following script:<br/>  
+
+`nohup run-asm-pipeline-post-review.sh -r Juicebox.final.review.assembly genome.nextpolish.fasta merged_nodups.txt &` generates the final assembly fasta file.<br/>  
+
+In the end, we should receive (**Figure 5**):
+
+![(See Figure 5)](C:\Users\Evgenii\Desktop\Tutorial\Figure_5.jpg)<br/>
+
+<p class="text-center">**Figure 5**. Synthetic similarities produced by D-Genies. (A) Reference vs Reference. (B) Reference vs Scaffolded 'Hi-C' genome. Red ellipses indicate the missing sequences in the centromeric regions.</p>
+
+# [IV] Genome annotation
+## [Step 1 | Repeat identification and masking]
+<span style="color:black">
+Now, we need to identify transposable elements and mask them for forthcoming structural and functional genome annotations.<br/>
+
+### RepeatModeler
+<span style="color:black">
+Firstly, we will use [RepeatModeler](https://github.com/Dfam-consortium/RepeatModeler), a *de novo* Transposable Element (TE) family identification and modeling package:<br/>
+
+<span style="color:black">
+`BuildDatabase -name A.thaliana.DB -engine rmblast A.thaliana_Scaffolded.fasta`<br/>
+
+<div class="alert alert-success">
+<span style="color:black">
+`BuildDatabase` creates a database for RepeatModeler.<br/>
+`-name` specifies a name of your database.<br/>
+`-engine` chooses a search engine, e.g., abblast/wublast or
+ ncbi/[rmblast version](http://www.repeatmasker.org/RMBlast.html).<br/>
+`A.thaliana_Scaffolded.fasta` is the name of your scaffolded genome.
+</span>
+</div>
+
+<span style="color:black">
+`nohup RepeatModeler -database A.thaliana.DB -engine rmblast -pa 16 &`
+
+<div class="alert alert-success">
+<span style="color:black">
+`RepeatModeler` calls the 'RepeatModeler' package itself.<br/>
+`-database` indicates the database created in the previous step.<br/>
+`-pa` specifies the number of shared-memory processors available.<br/>
+</span>
+</div>
+
+### RepeatMasker
+<span style="color:black">
+Secondly, we will use [RepeatMasker](https://github.com/rmhubley/RepeatMasker) to mask TE identified with RepeatModeler:<br/>
+
+<span style="color:black">
+`nohup RepeatMasker -pa 16 -gff -lib consensi.fa.classified A.thaliana_Scaffolded.fasta &`<br/>
+
+<div class="alert alert-success">
+<span style="color:black">
+`RepeatMasker` calls the program.<br/>
+`-gff` produces a .gff output.<br/>
+`-lib` specifies the TE library identified with RepeatModeler.<br/>
+</span>
+</div>
+
+<div class="alert alert-info">
+<span style="color:black">
+Notice, we do hardmasking (repetitive sequences will be replaced by stretches of N). Alternatively, you can use the '-xsmall' flag for softmasking (repetitive elements will be written in lower case). The usage of the hardmasked genome has one advantage. The annotation pipeline Braker, which we will use in the next step, does not "see" genes in masked regions and avoids the gene prediction there. On the other hand, it may lead to an annotation where some genes may be truncated or missing. Please consider the usage of both options, hardmasking and softmasking, and compare the results.
+</div>
+</span>
+<span style="color:black">
+Your results will be stored in a '.fasta.tbl' file, e.g.:
+
+<div class="alert alert-success">
+<span style="color:black">
+==================================================<br/>
+file name: A.thaliana_Scaffolded.fasta    
+sequences:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5<br/>
+total length:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;121411830 bp&nbsp;&nbsp;(121411830 bp excl N/X-runs)<br/>
+GC&nbsp;level:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;36.10&nbsp;%<br/>
+bases masked:&nbsp;&nbsp;&nbsp;21536817 bp ( 17.74 %)<br/>
+==================================================<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;number&nbsp;of&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;length&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;percentage<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;elements&ast;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;occupied&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;of&nbsp;sequence
+==================================================<br/>
+**Retroelements**&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6901&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6477344&nbsp;bp&nbsp;&nbsp;&nbsp;&nbsp;5.34&nbsp;%<br/>
+&nbsp;&nbsp;&nbsp;<font size="1">$\underline{SINEs:}$</font>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;75&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;4468&nbsp;bp&nbsp;&nbsp;&nbsp;0.00&nbsp;%<br/>
+&nbsp;&nbsp;&nbsp;<font size="1">$\underline{LINEs:}$</font>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;2276&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;1287298&nbsp;bp&nbsp;&nbsp;&nbsp;&nbsp;1.06&nbsp;%<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;L1/CIN4&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;2276&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;1287298&nbsp;bp&nbsp;&nbsp;&nbsp;&nbsp;1.06&nbsp;%<br/>
+&nbsp;&nbsp;&nbsp;<font size="1">$\underline{LTR\space elements:}$</font>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;4550&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5185578&nbsp;bp&nbsp;&nbsp;&nbsp;&nbsp;4.27&nbsp;%<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Ty1/Copia&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;1062&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;1135249&nbsp;bp&nbsp;&nbsp;&nbsp;&nbsp;0.94&nbsp;%<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Gypsy/DIRS1&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;3488&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;4050329&nbsp;bp&nbsp;&nbsp;&nbsp;&nbsp;3.34&nbsp;%<br/>
+<br/>
+**DNA transposons**&nbsp;&nbsp;&nbsp;&nbsp;2577&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;1673976&nbsp;bp&nbsp;&nbsp;&nbsp;1.38 %<br/>
+&nbsp;&nbsp;&nbsp;hobo-Activator&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;260&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;155922 bp&nbsp;&nbsp;&nbsp;0.13 %<br/>
+&nbsp;&nbsp;&nbsp;Tc1-IS630-Pogo&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;189&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;39029 bp&nbsp;&nbsp;&nbsp;0.03 %<br/>
+&nbsp;&nbsp;&nbsp;Tourist/Harbinger&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;121&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;35031 bp&nbsp;&nbsp;&nbsp;0.03 %<br/>
+<br/>
+**Rolling-circles**&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;1204&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;711175 bp&nbsp;&nbsp;&nbsp;0.59 %<br/>
+**Unclassified**:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;25101&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;10564094 bp&nbsp;&nbsp;&nbsp;8.70 %<br/>
+**Total interspersed repeats**:&nbsp;18715414 bp&nbsp;&nbsp;&nbsp;15.41 %<br/>
+**Small RNA**:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;460&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;297266 bp&nbsp;&nbsp;&nbsp;0.24 %<br/>
+**Simple repeats**:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;35123&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;1397657 bp&nbsp;&nbsp;&nbsp;1.15 %<br/>
+**Low complexity**:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8649&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;415305 bp&nbsp;&nbsp;&nbsp;0.34 %<br/>
+==================================================<br/>
+* most repeats fragmented by insertions or deletions have been counted as one element<br/>
+<br/>
+RepeatMasker version 4.1.2-p1 , default mode<br/>
+run with rmblastn version 2.11.0+<br/>
+The query was compared to classified sequences in ".../consensi.fa.classified"<br/>
+</span>
+</div>
+
+## [Step 2 | Structural annotation] 
+<span style="color:black">
+<p class="text-justify">
+In this step, we will use [BRAKER2](https://github.com/Gaius-Augustus/BRAKER) to structurally annotate the assembled genome with RNA-Seq data and information from proteins of any evolutionary distance. Before we start we need to process RNA-seq reads.</p>
+
+<span style="color:black">
+Let's convert RNA-Seq archives into the FASTQ format:<br/>
+
+`nohup fasterq-dump --split-files SRR3581356 &`<br/>
+`nohup fasterq-dump --split-files SRR3581681 &`<br/>
+`nohup fasterq-dump --split-files SRR3581693 &`<br/>
+`nohup fasterq-dump --split-files SRR3581703 &`<br/>
+`nohup fasterq-dump --split-files SRR3581705 &`<br/>
+`nohup fasterq-dump --split-files SRR3581706 &`<br/>
+`nohup fasterq-dump --split-files SRR3581708 &`<br/>
+
+<span style="color:black">
+Then, we will trim adaptors and remove low quality bases with [Trim Galore](https://github.com/FelixKrueger/TrimGalore):<br/>
+
+`nohup trim_galore -q 20 --cores 4 SRR3581356.fastq &`<br/>
+`nohup trim_galore -q 20 --cores 4 SRR3581681.fastq &`<br/>
+`nohup trim_galore -q 20 --cores 4 SRR3581693.fastq &`<br/>
+`nohup trim_galore -q 20 --cores 4 SRR3581703.fastq &`<br/>
+`nohup trim_galore -q 20 --cores 4 SRR3581705.fastq &`<br/>
+`nohup trim_galore -q 20 --cores 4 SRR3581706.fastq &`<br/>
+`nohup trim_galore -q 20 --cores 4 SRR3581708.fastq &`<br/>
+
+<span style="color:black">
+Next, we will use [hisat2](https://github.com/DaehwanKimLab/hisat2) for mapping the reads to the masked genome:<br/>
+<span style="color:black">
+
+`hisat2-build A.thaliana_Scaffolded.fasta.masked hisat2_masked_genome` creates an index file.<br/>
+
+`nohup hisat2 -x hisat2_masked_genome --rna-strandness F -U SRR3581706_trimmed.fq -S SRR3581706.sam &`<br/> 
+`nohup hisat2 -x hisat2_masked_genome --rna-strandness F -U SRR3581708_trimmed.fq -S SRR3581708.sam &`<br/>
+`nohup hisat2 -x hisat2_masked_genome --rna-strandness F -U SRR3581693_trimmed.fq -S SRR3581693.sam &`<br/>
+`nohup hisat2 -x hisat2_masked_genome --rna-strandness F -U SRR3581681_trimmed.fq -S SRR3581681.sam &`<br/>
+`nohup hisat2 -x hisat2_masked_genome --rna-strandness F -U SRR3581356_trimmed.fq -S SRR3581356.sam &`<br/>
+`nohup hisat2 -x hisat2_masked_genome --rna-strandness F -U SRR3581705_trimmed.fq -S SRR3581705.sam &`<br/>
+`nohup hisat2 -x hisat2_masked_genome --rna-strandness F -U SRR3581703_trimmed.fq -S SRR3581703.sam &`<br/>
+
+<div class="alert alert-info">
+<span style="color:black">
+Note, for paired-end reads alignment you should use `hisat2 -x genome -1 reads_1.fq -2 read2_2.fq -S output.sam`.<br/>
+</span>
+</div>
+
+Now, we need to convert the [.sam](https://en.wikipedia.org/wiki/SAM_(file_format)) files to the [.bam](https://support.illumina.com/help/BS_App_RNASeq_Alignment_OLH_1000000006112/Content/Source/Informatics/BAM-Format.htm) format:
+
+`nohup samtools view --threads 16 -b -F 4 SRR3581706.sam > SRR3581706.bam &`<br/>
+`nohup samtools view --threads 16 -b -F 4 SRR3581708.sam > SRR3581708.bam &`<br/>
+`nohup samtools view --threads 16 -b -F 4 SRR3581693.sam > SRR3581693.bam &`<br/>
+`nohup samtools view --threads 16 -b -F 4 SRR3581681.sam > SRR3581681.bam &`<br/>
+`nohup samtools view --threads 16 -b -F 4 SRR3581356.sam > SRR3581356.bam &`<br/>
+`nohup samtools view --threads 16 -b -F 4 SRR3581703.sam > SRR3581703.bam &`<br/>
+`nohup samtools view --threads 16 -b -F 4 SRR3581705.sam > SRR3581705.bam &`<br/>
+
+<div class="alert alert-success">
+<span style="color:black">
+`samtools view` calls the program.<br/>
+`--threads` is the number of BAM compression threads to use.<br/>
+`-b` provides an output in the BAM format.<br/>
+`-F 4` keeps only mapped reads.<br/>
+</span>
+</div>
+
+Subsequently, we have to [sort](http://quinlanlab.org/tutorials/samtools/samtools.html) the .bam files:
+
+`nohup samtools sort -@ 4 -m 10G SRR3581706.bam -o SRR3581706_sorted.bam &`<br/>
+`nohup samtools sort -@ 4 -m 10G SRR3581708.bam -o SRR3581708_sorted.bam &`<br/>
+`nohup samtools sort -@ 4 -m 10G SRR3581693.bam -o SRR3581693_sorted.bam &`<br/>
+`nohup samtools sort -@ 4 -m 10G SRR3581681.bam -o SRR3581681_sorted.bam &`<br/>
+`nohup samtools sort -@ 4 -m 10G SRR3581356.bam -o SRR3581356_sorted.bam &`<br/>
+`nohup samtools sort -@ 4 -m 10G SRR3581703.bam -o SRR3581703_sorted.bam &`<br/>
+`nohup samtools sort -@ 4 -m 10G SRR3581705.bam -o SRR3581705_sorted.bam &`<br/>
+
+<div class="alert alert-success">
+<span style="color:black">
+`samtools sort` calls the program.<br/>
+`-@` sets the number of sorting and compression threads.<br/>
+`-m` approximately specifies the maximum required memory per thread.<br/>
+`-o` output file.<br/>
+</span>
+</div>
+
+Thereafter, we need to download protein data related to plants:<br/>
+
+`nohup wget https://v100.orthodb.org/download/odb10_plants_fasta.tar.gz > odb10.out &`<br/>
+`tar xvf odb10_plants_fasta.tar.gz`<br/>
+`cat plants/Rawdata/* > proteins.fasta`<br/>
+
+Finally, we will run Braker2.<br/>
+
+<div class="alert alert-info">
+<span style="color:black">
+Note, although BRAKER supports the combination of RNA-Seq and protein data within the BRAKER pipeline, e.g.:
+`braker.pl --genome=genome.fasta.masked --bam=RNAseq.bam, --prot_seq=orthodb.fa --etpmode` [the developers strongly recommend](https://github.com/Gaius-Augustus/BRAKER) to run BRAKER twice (1x with RNA-Seq only, 1x with protein data only) and subsequently combine the results of both runs with [TSEBRA](https://github.com/Gaius-Augustus/TSEBRA), the Transcript Selector for BRAKER. Additionally, if you use a softmasked genome, you need to specify it with `--softmasking`. You also may consider detecting untranslated regions (UTRs) with the `--UTR=on` flag; however, please [carefully read about potential pitfalls](https://github.com/Gaius-Augustus/BRAKER) of doing so.<br/>
+</span>
+</div>
+
+Thus, we will firstly run BRAKER with RNA-seq data:
+
+`nohup braker.pl --species=A.thaliana --genome=A.thaliana_Scaffolded.fasta.masked --bam=SRR3581706_sorted.bam,SRR3581708_sorted.bam,SRR3581693_sorted.bam,SRR3581681_sorted.bam,
+SRR3581356_sorted.bam,SRR3581703_sorted.bam,SRR3581705_sorted.bam --cores=16 &`<br/>
+
+<div class="alert alert-success">
+<span style="color:black">
+`braker.pl` calls the program.<br/>
+`--species` specifies the original species of the original run.<br/>
+`--genome` provides a reference genome.<br/>
+`--bam` provides RNA-seq data.<br/>
+`--cores` specifies the maximum number of cores that can be used during computation.<br/>
+</span>
+</div>
+
+Secondly, we will run BRAKER with the protein data:<br/>
+
+`nohup braker.pl --species=A.thaliana2 --genome=A.thaliana_Scaffolded.fasta.masked --prot_seq=proteins.fasta --epmode --cores=16 &`<br/>
+
+<div class="alert alert-success">
+<span style="color:black">
+`--prot_seq` provides protein data.<br/>
+`--epmode` runs BRAKER in EP-mode, i.e., with proteins of any evolutionary distance as processed by ProtHint within BRAKER.<br/>
+</span>
+</div>
+
+Now, we will combine the results:
+
+`tsebra.py -g braker1_out/augustus.hints.gtf,braker2_out/augustus.hints.gtf -c default.cfg -e braker1_out/hintsfile.gff,braker2_out/hintsfile.gff -o braker1+2_combined.gtf`<br/>
+
+<div class="alert alert-danger">
+<span style="color:black">
+**IMPORTANT!** "*BRAKER produces a second complete gene set named `braker.gtf`, besides the official output `augustus.hints.gtf`. The `braker.gtf` is the result of merging `augustus.hints.gtf` with some 'high-confidents' genes from the GeneMark prediction. However, the merging process leads to a formatting issue in braker.gtf. A quick fix for this formatting issue is the script `fix_gtf_ids.py`; however, take note that the `braker.gtf` and `fix_gtf_ids.py` [haven't been tested sufficently](https://github.com/Gaius-Augustus/TSEBRA) and there is no guarantee that this gene set is superior to `augustus.hints.gtf`*" Additionally, TSEBRA provides [several configuration files](https://github.com/Gaius-Augustus/TSEBRA/issues/6): (1) `default`, (2) `keep_ab_initio.cfg` and (3) `pref_braker1.cfg`.<br/>
+</div>        
+</span>
+
+<div class="alert alert-info">
+<span style="color:black">
+My analysis resulted in:<br/>
+Braker [only proteins data] - 29'472 genes.<br/>
+Braker [only RNA-seq data] - 28'444 genes.<br/>
+Braker [ETP mode] - 30'721 genes.<br/>
+Braker + TSEBRA [default] - 27'695 genes.<br/>
+Braker + TSEBRA [keep_ab_initio] - 31'671 genes.<br/>
+Braker + TSEBRA [pref_braker1] - 28'309 genes.<br/>
+Further we will assess these results with BUSCO.<br/>
+</span>
+</div>
+
+## [Step 3 | Functional annotation] 
+<span style="color:black">
+There are several options to functionally annotate genomes. Here, I would like to share three external tutorials:<br/>
+
+<p class="text-justify"><span style="color:black">
+(1) Annotation with Gene Ontology (GO) terms written by [Yi Jin Liew](https://github.com/lyijin). [The pipeline](https://github.com/lyijin/annotating_proteomes) combines a search against three protein database sequences: (a) the **SwissProt** database (manually reviewed entries), (b) the **TrEMBL** database (contains high quality computationally analysed records that are enriched with automatic annotation and classification) and (c) the **NCBI** database (RefSeq non-redundant proteins). In addition, there you will find several scripts to assign GO terms. <br/></p>
+
+<p class="text-justify"><span style="color:black">
+(2) The MAKER Tutorial for WGS Assembly and Annotation Winter School 2018 (section *[Add functional annotations and meta-data](http://weatherby.genetics.utah.edu/MAKER/wiki/index.php/MAKER_Tutorial_for_WGS_Assembly_and_Annotation_Winter_School_2018#Add_functional_annotations_and_meta-data)*). It utilises (a) the SwissProt database and (b) **[InterProScan](https://interproscan-docs.readthedocs.io/en/latest/)** to classify protein families and establish GO terms.<br/></p>
+
+<p class="text-justify"><span style="color:black">
+(3) Last but not least, [a pipeline for crickets genome annotation](https://github.com/guillemylla/Crickets_Genome_Annotation) provided by Guillem Ylla. It uses the UniProt database (a combination of Swiss-Prot, TrEMBL, UniParc and UniRef) and InterProScan to classify protein families and establish GO terms.<br/></p>
+
+<div class="alert alert-danger">
+<span style="color:black">
+**IMPORTANT!** The above-mentioned databases (decompressed) will need a fairly substantial storage, e.g., TrEMBL and NCBI require > 100 GB each. In addition, the BLASTing of the newly assembled genome against these databases may take several days.</br>
+</div>        
+</span>
+
+# [V] Quality assessment & visualisation
+
+## [Step 1 | Qualimap]
+
+<span style="color:black">
+We will use [Qualimap](http://qualimap.conesalab.org/) to generate some statistics on our assembly.  
+
+<span style="color:black">
+`minimap2 -t 16 -ax map-ont A.thaliana_Scaffolded.fasta cns_final.fasta.gz > A.thaliana_Scaffolded.aligned.sam`<br/>
+
+<div class="alert alert-success">
+<span style="color:black">
+`minimap2` calls the pairwise aligner.<br/>
+`-t` specifies the maximum number of cores that can be used during computation.<br/>
+`-ax` specifies the output format in .sam (a) and the usage of long sequences (x).<br/>
+`map-ont` specifies the the exact type of long reads (here ONT reads).<br/>
+`A.thaliana_Scaffolded.fasta` specifies the reference genome.<br/>
+`cns_final.fasta.gz` specifies the path for ONT reads (here we use the longest reads from the NECAT step).<br/>
+`A.thaliana_Scaffolded.aligned.sam` specifies an output file.<br/>
+</span>
+</div>
+
+<span style="color:black">
+`samtools view --threads 16 -b -F 4 A.thaliana_Scaffolded.aligned.sam > A.thaliana_Scaffolded.aligned.bam`<br/>
+
+<span style="color:black">
+`samtools sort -@ 10 -m 10G A.thaliana_Scaffolded.aligned.bam -o A.thaliana_Scaffolded.aligned.sorted.bam`<br/>
+
+<span style="color:black">
+`nohup qualimap bamqc -bam A.thaliana_Scaffolded.aligned.sorted.bam --java-mem-size=60G -c --outdir /Qualimap outformat pdf &`<br/>
+
+<div class="alert alert-success">
+<span style="color:black">
+`qualimap bamqc` runs [the application](https://hpc.nih.gov/docs/QualimapManual.pdf).<br/>
+`-bam` specifies an inmput file.<br/>
+`--java-mem-size` sets the desired memory size.<br/>
+`-c` paints chromosome limits inside charts.<br/>
+`--outdir` specifies an output directory.<br/>
+`outformat` specifies an output format.<br/>
+</span>
+</div>
+<span style="color:black">
+At the end Qualimap produces a bunch of different metrics, e.g.:
+
+<div class="alert alert-success">
+<span style="color:black">
+Reference size:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;121,411,830<br/>
+Number of reads:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;27,493<br/>
+Mapped reads:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;27,493 / 100%<br/>
+GC Percentage:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;36.87%<br/>
+General error rate:&nbsp;&nbsp;&nbsp;&nbsp;1.55%<br/>
+</span>
+</div>
+
+<span style="color:black">
+<p class="text-justify">In addition, Qualimap creates several plots. For instance, **Figure 6** shows the number of reads that cover each section of the genome. The red line indicates an average coverage that in our case is around 30x (please keep in mind that we retained only the longest 30x corrected reads in the NECAT step). Nonetheless, you may also want to use Qualimap with HiFi reads that we used to polish our assembly.</p>
+
+![(See Figure 6)](C:\Users\Evgenii\Desktop\Tutorial\Figure_6.png)<br/>
+
+<span style="color:black">
+<p class="text-center">**Figure 6**. Coverage across reference.</p>
+
+<span style="color:black">
+<p class="text-justify">Another important plot is present in **Figure 7**. Notice, the mapping quality drops in the centromeric and two telomeric (chromosomes 2 and 4) regions. You may try to improve the assembly of these sequences by a gap closing step (please see [the original article](https://doi.org/10.1016/j.gpb.2021.08.003)).</p>
+
+![(See Figure 7)](C:\Users\Evgenii\Desktop\Tutorial\Figure_7.png)<br/>
+
+<span style="color:black">
+<p class="text-center">**Figure 7**. Mapping quality across reference.</p>
+
+## [Step 2 | QUAST]
+
+<span style="color:black">
+We may also want to get some more stats on our assembly with [the QUality ASsessment Tool](http://quast.sourceforge.net/docs/manual.html) (QUAST).
+
+<span style="color:black">
+`quast.py --output-dir quast A.thaliana_Scaffolded.fasta` gives an overview on our assembly.<br/>
+<span style="color:black">
+`nohup quast.py -o /Quast -r GWHBDNP00000000.genome.fasta A.thaliana_Scaffolded.fasta --threads 16 --large --min-alignment 20000 --extensive-mis-size 500000 --min-identity 90 &` compares our assembly with a reference genome.<br/>
+
+<div class="alert alert-success">
+<span style="color:black">
+`quast.py` calls the program.<br/>
+`-o` specifies an output directory.<br/>
+`-r` specifies a reference genome.<br/>
+`A.thaliana_Scaffolded.fasta` specifies the assembled genome for the comparison with the reference.<br/>
+`--threads` specifies the maximum number of threads.<br/>
+`--large` use this flag for large genomes (typically > 100 Mbp).<br/>
+`--min-alignment` specifies the minimum length of alignment in bp.<br/>
+`--extensive-mis-size` see the manual for [details](http://quast.sourceforge.net/docs/manual.html#sec3.1.2).<br/>
+`--min-identity` alignments with identity (%) worse than this value will be filtered.<br/>
+</span>
+</div>
+
+<span style="color:black">
+<p class="text-justify">You should get a `report.html` file (See **Interactive Figure 8**) that contains all the stats. Moreover, you will get an `icarus.html` file (a genome visualiser for accurate assessment and analysis of genomic draft assemblies) where you can browse for the misassembled sequences (See **Interactive Figure 8**).</p>
+
+```{r, echo=FALSE}
+htmltools::tags$iframe(title = "Interactive Figure 8", src = "E:/Work_place_JU_Krakow/2022/Ylla_Lab/Assembly_Temp/Quast/icarus_viewers/GWHBDNP00000003.html", 
+                       height=600, width="100%")
+```
+
+<span style="color:black">
+<p class="text-center">**Interactive Figure 8**. The QUAST output file.</p>
+
+<div class="alert alert-info">
+<span style="color:black">
+If you want to scrutinise the output, it is better to use [the QUAST manual](http://cab.cc.spbu.ru/quast/manual.html#est_ref_size) and [the GitHub page](https://github.com/ablab/quast/issues).
+</div>        
+</span>
+
+## [Step 3 | k-mer analysis]
+
+<span style="color:black">
+In this step, we will estimate genome size and heterozygosity using a kmer-based approach with Illumina reads.
+
+<span style="color:black">
+`nohup jellyfish count <(zcat CRR302670_f1.fastq.gz) <(zcat CRR302670_r2.fastq.gz) -C -m 21 -s 1G -t 16 -o reads.jf &` <br/>
+
+<div class="alert alert-success">
+<span style="color:black">
+`jellyfish count` calls [the program](https://github.com/gmarcais/Jellyfish) to count all k-mers.<br/>
+`zcat` allows to expand and view a compressed file without uncompressing it.<br/>
+`-C` [considers](https://www.biostars.org/p/153170/) both a kmer and its reverse "complement" as equivalent.<br/>
+`-m` specifies mers.<br/>
+`-s` specifies the number of GB (G) or MB (M) of system memory to use for k-mer counting.<br/>
+`-t` specifies the number of cores for the computation.<br/>
+`-o` specifies an output file.<br/>
+</span>
+</div>
+<span style="color:black">
+Next, we need to compute the histogram of the k-mer occurrences:<br/>
+`nohup jellyfish histo -t 16 reads.jf > reads.histo &`<br/>
+
+<span style="color:black">
+Lastly, we will visualise the result via [GenomeScope 2.0](http://qb.cshl.edu/genomescope/genomescope2.0/) using defult parameters:<br/>
+
+![(See Figure 9)](C:\Users\Evgenii\Desktop\Tutorial\Figure_9.png)<br/>
+<span style="color:black">
+<p class="text-center">**Figure 9**. The k-mer analysis result for the *A. thaliana* specimen using the paired-end Illumina data.</p>
+
+<div class="alert alert-info">
+<span style="color:black">
+Please note, **Figure 9** demonstrates that (1) the estimated genome size is 135.6 Mb, close to [the current estimate of 134.6 Mb](https://www.arabidopsis.org/portals/genAnnotation/gene_structural_annotation/agicomplete.jsp#:~:text=The%20Arabidopsis%20thaliana%20genome%20was,size%20of%20approximately%20135%2Dmegabases.), and (2) the heterozygosity of this specimen is very low (0.1486%). Nonetheless, the genome size assembled here is only 121 Mb, mostly due to the lack of the centromeric regions. The heterozygosity observed here is similar to that one from [the original article](https://www.sciencedirect.com/science/article/pii/S1672022921001741?via%3Dihub) (0.0865%).
+<br/>
+Additionally, please consider reading a comment of Professor Michael Schatz, [a developer of GenomeScope](https://academic.oup.com/bioinformatics/article/33/14/2202/3089939?login=false), regarding the usage of [HiFi reads for such an analysis](https://github.com/schatzlab/genomescope/issues/80) and potential pitfalls with Illumina data.
+</span>
+</div>
+
+## [Step 4 | BUSCO]
+
+<span style="color:black">
+<p class="text-justify">To assess genome assembly and annotation completeness we will use Benchmarking Universal Single-Copy Orthologs ([BUSCO](https://busco.ezlab.org/)). So, let's firstly assess three assemblies ([Col-XJTU](https://doi.org/10.1016/j.gpb.2021.08.003), [TAIR10.1](https://www.ncbi.nlm.nih.gov/assembly/GCF_000001735.4/) and our assembly):</p>
+
+`nohup busco -i GCF_000001735.4_TAIR10.1_genomic.fasta -o /TAIR10.1 -m genome -l eudicots_odb10 -c 16 &` <br/>
+`nohup busco -i GWHBDNP00000000.genome.fasta -o /Col_XJTU -m genome -l eudicots_odb10 -c 16 &` <br/>
+`nohup busco -i A.thaliana.assembled.fasta -o /Assembled -m genome -l eudicots_odb10 -c 16 &` <br/>
+
+<div class="alert alert-success">
+<span style="color:black">
+`busco` calls the program.<br/>
+`-i` specifies an input genome file.<br/>
+`-o` specifies an output file.<br/>
+`-m` sets the assessment MODE.<br/>
+`-l` specifies a lineage dataset (all BUSCO datasets are placed [here](https://busco-data.ezlab.org/v5/data/lineages/)).<br/>
+`-c` specifies the number of threads/cores to use.<br/>
+</span>
+</div>
+
+<span style="color:black">
+After the successful runs we should get:<br/>
+
+<div class="alert alert-success">
+<span style="color:black">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;TAIR10.1&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Col_XJTU&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Assembled here<br/>
+Complete BUSCOs:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;99.6% (2316)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;99.7% (2317)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;99.6% (2317)<br/>
+Complete and single-copy BUSCOs:&nbsp;&nbsp;&nbsp;&nbsp;98.8% (2297)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;98.8% (2297)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;98.7% (2296)<br/>
+Complete and duplicated BUSCOs:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0.8% (19)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0.9% (20)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0.9% (21)<br/>
+Fragmented BUSCOs:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0.1% (2)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0.1% (2)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0.1% (2)<br/>
+Missing BUSCOs:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0.3% (8)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0.2% (7)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0.3% (7)<br/>
+Total BUSCO groups searched:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;100% (2326)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;100% (2326)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;100% (2326)<br/>
+</span>
+</div>
+
+<span style="color:black">
+<p class="text-justify">As we see here, all three assemblies are quite similar. Additionally, we will assess structural annotation of these genomes (use the `-m protein` flag for annotated gene sets):</p>
+
+<div class="alert alert-success">
+<span style="color:black">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;TAIR10.1&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Col_XJTU&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Assembled here<br/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;TSEBRA [default]<br/>
+Complete BUSCOs:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;99.8% (2320)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;85.7% (1992)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;96.4% (2243)<br/>
+Complete and single-copy BUSCOs:&nbsp;&nbsp;&nbsp;&nbsp;59.5% (1383)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;51.1% (1188)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;91.5% (2129)<br/>
+Complete and duplicated BUSCOs:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;40.3% (937)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;34.6% (804)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;4.9% (114)<br/>
+Fragmented BUSCOs:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0.0% (0)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0.3% (8)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0.9% (21)<br/>
+Missing BUSCOs:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0.2% (6)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;14.0% (326)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;2.7% (62)<br/>
+Total BUSCO groups searched:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;100% (2326)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;100% (2326)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;100% (2326)<br/>
+</span>
+</div>
+
+<div class="alert alert-danger">
+<span style="color:black">
+**IMPORTANT!** To get amino acids (AA) data from a .gff file you can use [GffRead](https://github.com/gpertea/gffread), e.g.:<br/>
+`gffread -y Output_File_AA.fa -g Input_Genome_assembly.fasta Input_GFF_File.gff`<br/> 
+A Col_XJTU annotation is [here](https://dx.doi.org/10.6084/m9.figshare.14913045).<br/> 
+A TAIR10.1 annotation is [here](https://www.arabidopsis.org/download/index-auto.jsp%3Fdir%3D%252Fdownload_files%252FGenes%252FTAIR10_genome_release). Alternatively, you can download an AA file [here](https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/735/GCA_000001735.2_TAIR10.1/) or [here](https://www.ncbi.nlm.nih.gov/genome/?term=GCA_000001735.2).
+<br/>
+</div>        
+</span>
+
+<span style="color:black">
+<p class="text-justify">In addition, I have provided all BUSCOs assessments for the annotated genome with Braker2 (see the Structural annotation step for more details):</p> 
+
+<div class="alert alert-success">
+<span style="color:black">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;TSEBRA&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;TSEBRA&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;TSEBRA&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ETP&nbsp;mode&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;RNA-seq&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Proteins<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[default]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[keep_ab_initio]&nbsp;&nbsp;&nbsp;&nbsp;[pref_braker1]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;only&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;only<br/>
+C:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+96.4% (2243)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+96.6% (2247)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+95.5% (2222)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+97.4% (2265)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+94.4% (2196)
+&nbsp;&nbsp;
+97.4% (2265)<br/>
+C & SC:&nbsp;
+91.5% (2129)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+87.9% (2045)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+85.8% (1996)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+89.4% (2079)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+88.0% (2047)
+&nbsp;
+92.5% (2152)<br/>
+C & D:&nbsp;&nbsp;&nbsp;
+4.9% (114)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+8.7% (202)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+9.7% (114)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+8.0% (186)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+6.4% (149)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+4.9% (113)<br/>
+F:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+0.9% (21)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+0.8% (19)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+1.1% (25)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+1.2% (29)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+2.1% (48)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+1.0% (23)<br/>
+M:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+2.7% (62)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+2.6% (60)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+3.4% (79)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+1.4% (32)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+3.5% (82)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+1.6% (38)<br/>
+T:
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+100% (2326)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+100% (2326)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+100% (2326)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+100% (2326)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+100% (2326)
+&nbsp;&nbsp;&nbsp;&nbsp;
+100% (2326)<br/>
+</span>
+</div>
+
+<div class="alert alert-danger">
+<span style="color:black">
+**IMPORTANT!** You can try to improve these annotations by using softmasking instead of hardmasking in the RepeatMasker step.
+<br/>
+</div>        
+</span>
+
+## [Step 5 | IGV] 
+
+<span style="color:black">
+<p class="text-justify">It is also useful to 'manually' check the quality of your assembly. Here we will use the .bam files from the Qualimap step. All we need to do is to index the assembled genome and the .bam files:</p> 
+
+`samtools faidx A.thaliana_Scaffolded.fasta`<br/> 
+`samtools index A.thaliana_Scaffolded.aligned.sorted.bam`<br/> 
+
+<div class="alert alert-danger">
+<span style="color:black">
+**IMPORTANT!** It may take quite a bit of time to create .bam files for the HiFi reads. Be sure that you have enough resources to finish the job. Alternatively, you may use a subsampling option of samtools, e.g.:<br/>
+`samtools view -s 0.5` this will subsample half of the reads that were mapped.<br/>
+</div>        
+</span>
+
+<span style="color:black">
+<p class="text-justify">Now, we will open [IGV](https://software.broadinstitute.org/software/igv/home). From the main window, click on 'Genomes' and load the assembled genome. Then, click on 'File' and load the .bam file with the longest 30x corrected ONT reads (**Figure 10A**). If you have the HiFi reads, you may also add them (**Figure 10B**).</p> 
+
+![(See Figure 10)](C:\Users\Evgenii\Desktop\Tutorial\Figure_10.png)<br/>
+
+<span style="color:black">
+<p class="text-center">**Figure 10**. IGV interface. (A) The longest 30x corrected ONT reads. (B) The HiFi reads.</p>
+
+<div class="alert alert-info">
+<span style="color:black">
+Please note, the corrected ONT reads still have some noise/mismatches (the low base quality support against the reference, see the red rectangular boxes in **Figure 10A**). On the other hand, the HiFi reads perfectly support the reference sequence (**Figure 10B**).
+</span>
+</div>
+
+## [Step 6 | Synteny]
+
+<span style="color:black">
+Here, we will plot synteny and structural rearrangements between the TAIR10.1 genome and our assembly.
+
+<span style="color:black">
+`minimap2 -ax asm5 --eqx TAIR10.1.fasta A.thaliana.assembled.fasta > TAIR10.1_vs_GENOME.sam`<br/>
+
+<div class="alert alert-success">
+<span style="color:black">
+`asm5` aligns assembly to reference genome.<br/>
+`--eqx` output =/X CIGAR operators for sequence match/mismatch.<br/>
+`TAIR10.1.fasta` specifies a reference genome.<br/>
+`A.thaliana.assembled.fasta` specifies a query genome.<br/>
+`TAIR10.1_vs_GENOME.sam` specifies an output file.<br/>
+</span>
+</div>
+
+<span style="color:black">
+`samtools view -b TAIR10.1_vs_GENOME.sam > TAIR10.1_vs_GENOME.bam` converts .sam to .bam<br/>
+
+<span style="color:black">
+`syri -c TAIR10.1_vs_GENOME.bam -r TAIR10.1.fasta -q GENOME.fasta -k -F B`<br/>
+
+<div class="alert alert-success">
+<span style="color:black">
+`syri` calls [the program](https://github.com/schneebergerlab/syri).<br/>
+`-c` specifies the file containing alignment coordinates.<br/>
+`-r` specifies genome a reference genome.<br/>
+`-q` specifies a query genome.<br/>
+`-k` keeps intermediate output files.<br/>
+`-F` specifies an input file type. T: Table, S: SAM, B: BAM, P: PAF.<br/>
+</span>
+</div>
+
+<span style="color:black">
+`plotsr --sr syri.out --genomes genomes.txt -H 8 -W 5 -d 600 -o output_plot.png`<br/>
+
+<div class="alert alert-success">
+<span style="color:black">
+`plotsr` calls [the program](https://github.com/schneebergerlab/plotsr).<br/>
+`--sr` specifies structural annotation mappings identified by [SyRI](https://github.com/schneebergerlab/syri).<br/>
+`--genomes` specifies a list of genomes.<br/>
+`-H` specifies the height of the plot.<br/>
+`-W` specifies the width of the plot.<br/>
+`-d` specifies the DPI for the final image.<br/>
+`-o` specifies an output file name (acceptable formats: pdf, png and svg).<br/>
+</span>
+</div>
+
+<span style="color:black">
+In the end, you should get the following result (**Figure 11**):
+
+![(See Figure 11)](C:\Users\Evgenii\Desktop\Tutorial\Figure_11.png)<br/>
+
+<span style="color:black">
+<p class="text-center">**Figure 11**. The synteny and structural rearrangements plot (only Chromosome 1 is shown).</p>
+
+## [Step 7 | Circos]
+
+<span style="color:black">
+There are many options to generate Circos-like plots:<br/>
+
+<span style="color:black">
+[1] [The Circos software package](http://circos.ca/).<br/>
+[2] Circos in [Galaxy](https://training.galaxyproject.org/training-material/topics/visualisation/tutorials/circos/tutorial.html).<br/>
+[3] Circos in [TBtools](https://github.com/CJ-Chen/TBtools).<br/>
+[4] [circlize](https://jokergoo.github.io/circlize_book/book/) in R.<br/>
+[5] [shinyCircos](https://github.com/YaoLab-Bioinfo/shinyCircos) in R.<br/>
+
+<span style="color:black">
+<p class="text-justify">Here, we will use shinyCircos to produce **Figure 12** (please see this [tutorial](https://venyao.xyz/shinyCircos/shinyCircos_Help_Manual.pdf) for more details).<br/></p>
+
+![(See Figure 12)](C:\Users\Evgenii\Desktop\Tutorial\Figure_12.png)<br/>
+
+<span style="color:black">
+<p class="text-center">**Figure 12**. Circos plot of the *A. thaliana* genome assembly calculated in 10-kb windows. (A) The karyotype of the assembled chromosomes. (B) GC density. (C) Density of transposable elements. (D) Gene density. (E) Syntenic blocks across chromosomes.</p>
+
+<span style="color:black">
+To reproduce **Figure 12** we need:<br/>
+
+<span style="color:black">
+[1] Create a .csv file with the chromosome data (see the QUAST output) for **Figure 12A**:<br/>
+
+<div class="alert alert-success">
+<span style="color:black">
+chr
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+start&nbsp;&nbsp;&nbsp;&nbsp;
+end<br/>
+Ch_1
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+1
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+30726451<br/>
+Ch_2
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+1
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+20485188<br/>
+Ch_3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;1&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;23269929<br/>
+Ch_4&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;1&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;19225652<br/>
+Ch_5
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+1
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+27704610<br/>
+</span>
+</div>
+
+<span style="color:black">
+<p class="text-justify">[2] Generate GC density data for **Figure 12B** (please download two python scripts, **fasta2GCcontentHeatmapTrack.py** and **gff2circos-heatmap.py**, from [here](https://groups.google.com/g/circos-data-visualization/c/8YJQZKQaW1Y/m/l8j1nNXUBwAJ)):<br/></p>
+
+<span style="color:black">
+`python fasta2GCcontentHeatmapTrack.py -window 10000 -fasta A.thaliana.assembled.fasta > GC_density.csv`<br/>
+
+<div class="alert alert-success">
+<span style="color:black">
+`python fasta2GCcontentHeatmapTrack.py` calls the script.<br/>
+`-window` specifies the number of bases in the sliding window.<br/>
+`-fasta` specifies an input file.<br/>
+`>` specifies an output file.<br/>
+</span>
+</div>
+
+You may want to add the proper headings to the `GC_density.csv` file, e.g.:<br/>
+
+<div class="alert alert-success">
+<span style="color:black">
+chr
+&nbsp;&nbsp;&nbsp;
+start
+&nbsp;&nbsp;&nbsp;
+end
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+value1<br/>
+Ch_1
+&nbsp;&nbsp;&nbsp;
+0
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+9999
+&nbsp;&nbsp;&nbsp;&nbsp;
+0.3315<br/>
+</span>
+</div>
+
+<span style="color:black">
+<p class="text-justify">[3] Generate density of transposable elements for **Figure 12C**:<br/></p>
+
+<span style="color:black">
+`python gff2circos-heatmap.py -window 10000 -fasta A.thaliana.assembled.fasta -gff A.thaliana.assembled.fasta.out.gff > TE_density.csv`<br/>
+
+<div class="alert alert-success">
+<span style="color:black">
+`python gff2circos-heatmap.py` calls the script.<br/>
+`-window` specifies the number of bases in the sliding window.<br/>
+`-fasta` specifies an input file.<br/>
+`-gff` specifies a TE input file (from the RepeatMasker step).<br/>
+`>` specifies an output file.<br/>
+</span>
+</div>
+
+<span style="color:black">
+Add the headings:<br/>
+
+<div class="alert alert-success">
+<span style="color:black">
+chr
+&nbsp;&nbsp;&nbsp;
+start
+&nbsp;&nbsp;&nbsp;
+end
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+value1<br/>
+Ch_1
+&nbsp;&nbsp;&nbsp;
+0
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+9999
+&nbsp;&nbsp;&nbsp;&nbsp;
+0.0277<br/>
+</span>
+</div>
+
+<span style="color:black">
+<p class="text-justify">[3] Generate gene density for **Figure 12D**:<br/></p>
+
+<span style="color:black">
+`python gff2circos-heatmap.py -window 10000 -fasta A.thaliana.assembled.fasta -gff braker.gff3 > Gene_density.csv`<br/>
+
+<div class="alert alert-success">
+<span style="color:black">
+`-gff` specifies a .gff annotation file (from the Braker step).<br/>
+</span>
+</div>
+
+<span style="color:black">
+Add the headings:<br/>
+
+<div class="alert alert-success">
+<span style="color:black">
+chr
+&nbsp;&nbsp;&nbsp;
+start
+&nbsp;&nbsp;&nbsp;
+end
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+value1<br/>
+Ch_1
+&nbsp;&nbsp;&nbsp;
+0
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+9999
+&nbsp;&nbsp;&nbsp;&nbsp;
+0.3928<br/>
+</span>
+</div>
+
+<div class="alert alert-danger">
+<span style="color:black">
+**IMPORTANT!** If you have a .gtf file you can convert it to .gff with [AGAT](https://github.com/NBISweden/AGAT).<br/>
+</div>        
+</span>
+
+<span style="color:black">
+<p class="text-justify">[4] Identify Syntenic blocks for **Figure 12E**:<br/></p>
+
+<span style="color:black">
+`minimap2 -x asm5 A.thaliana.assembled.fasta A.thaliana.assembled.fasta > Synteny_Circos.csv`<br/>
+
+<span style="color:black">
+Keep only relevant data, e.g.:<br/>
+
+<div class="alert alert-success">
+<span style="color:black">
+chr1
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+start1
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+end1
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+chr2
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+start2
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+end2<br/>
+Ch_1
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+7353566
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+7365826
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Ch_2
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+13347346
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+13359606
+<br/>
+</span>
+</div>
+
+<span style="color:black">
+<p class="text-justify">For a more comprehensive scan for syntenic blocks you may use [MCScanX](https://github.com/wyp1125/MCScanX) or Blast+ tools, e.g.:<br/></p>
+
+<span style="color:black">
+`makeblastdb -in Your_Genome.fa -dbtype nucl -out Genome_blast_db`<br/>
+`blastn -db Genome_blast_db -query Your_Genome.fa -outfmt 6 -out all_vs_all.tsv -num_threads 4`<br/>
+
+# Acknowledgements
+<span style="color:black">
+<p class="text-justify">I would like to express my gratitude to [Dr Guillem Ylla](https://ylla-lab.github.io/), the head of the laboratory of Bioinformatics and Genome Biology at the Jagiellonian University (Kraków, Poland), for providing the assistance, feedback and computing resources for this tutorial.</p>
+![](https://visitor-badge.deta.dev/badge?page_id=http://github.com/niwdoog/Genome_Assembly_Long_Reads_Hi-C)

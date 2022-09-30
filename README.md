@@ -1,10 +1,10 @@
-This [short tutorial](https://niwdoog.github.io/Genome_Assembly_Long_Reads_Hi-C/) covers some basic analyses aiming to perform a chromosome-level scaffolding and annotation of a diploid plant using primarily data produced by third generation sequencing.
+[This short tutorial](https://niwdoog.github.io/Genome_Assembly_Long_Reads_Hi-C/) covers some basic analyses aiming to perform a chromosome-level scaffolding and annotation of a diploid plant using primarily data produced by third generation sequencing.
 
 Table of contents:
 
-[I] Preface
-In a nutshell
-Learning outcomes
+[I] Preface<br/>
+In a nutshell<br/>
+Learning outcomes<br/>
 Keywords
 DOI
 [II] Software & sequencing data

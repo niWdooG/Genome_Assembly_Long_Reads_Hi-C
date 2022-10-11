@@ -46,13 +46,13 @@ Please note, all data used here was produced by [Wang B et al., 2021](https://do
 <span style="color:black">
 After completing this tutorial you will be able to:
 
-* <span style="color:black">assemble a genome of your interest using data produced by third generation sequencing, i.e., [Oxford Nanopore Technologies (ONT)](https://nanoporetech.com/) and [Pacific Biosciences](https://www.pacb.com/) Circular Consensus Sequencing ([CCS](https://www.pacb.com/technology/hifi-sequencing/)) reads.</span>
-* <span style="color:black">scaffold assembled contigs to the scale of full chromosomes using a reference genome.</span>
-* <span style="color:black">scaffold assembled contigs to the scale of full chromosomes using Hi-C data.</span>
-* <span style="color:black">fill sequencing gaps if necessary (pending).</span>
-* <span style="color:black">identify, annotate and mask transposable elements.</span>
-* <span style="color:black">annotate genomes using RNA-Seq and protein homology information.</span>
-* <span style="color:black">visualise the results.</span>
+* <span style="color:black">Assemble a genome of your interest using data produced by third generation sequencing, i.e., [Oxford Nanopore Technologies (ONT)](https://nanoporetech.com/) and [Pacific Biosciences](https://www.pacb.com/) Circular Consensus Sequencing ([CCS](https://www.pacb.com/technology/hifi-sequencing/)) reads.</span>
+* <span style="color:black">Scaffold assembled contigs to the scale of full chromosomes using a reference genome.</span>
+* <span style="color:black">Scaffold assembled contigs to the scale of full chromosomes using Hi-C data.</span>
+* <span style="color:black">Fill sequencing gaps if necessary (pending).</span>
+* <span style="color:black">Identify, annotate and mask transposable elements.</span>
+* <span style="color:black">Annotate genomes using RNA-Seq and protein homology information.</span>
+* <span style="color:black">Visualise the results.</span>
 </span>
 
 ## Keywords
@@ -211,7 +211,7 @@ Please try to organise your files in a proper way. For instance, let's create a 
 Open the newly created folder:<br/>
 `cd Downloads`<br/>
 
-<span style="color:black"><p class="text-justify">And download two reference genomes of *A. thaliana* (the first one produced by [Wang B et al., 2021](https://doi.org/10.1016/j.gpb.2021.08.003) and the second one that was submitted to the GenBank by [The Arabidopsis Information Resource (TAIR)](https://www.ncbi.nlm.nih.gov/assembly/GCF_000001735.4/):</p>
+<span style="color:black"><p class="text-justify">And download two reference genomes of *A. thaliana* (the first one produced by [Wang B et al., 2021](https://doi.org/10.1016/j.gpb.2021.08.003) and the second one that was submitted to the GenBank by [The Arabidopsis Information Resource (TAIR)](https://www.ncbi.nlm.nih.gov/assembly/GCF_000001735.4/). Later on, we will be comparing our assembly with these reference genomes:</p>
 <font size="3.5">`nohup wget https://download.cncb.ac.cn/gwh/Plants/Arabidopsis_thaliana_AT_GWHBDNP00000000/GWHBDNP00000000.genome.fasta.gz &`<br/></font>
 <font size="3.5">`nohup wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/plant/Arabidopsis_thaliana/latest_assembly_versions/GCF_000001735.4_TAIR10.1/GCF_000001735.4_TAIR10.1_genomic.fna.gz &`<br/></font>
 
@@ -275,7 +275,7 @@ We will correct the ONT reads with [NECAT](https://github.com/xiaochuanle/NECAT)
 <span style="color:black">
 `cd /home/Downloads/ONT/` move to the `ONT` folder.<br/> 
 `cat > read_list.txt` create a .txt file `read_list`.<br/> 
-`/home/Downloads/ONT/CRR302667.fastq.gz` type a path to the ONT reads and press `CTRL`+`D` to save `read_list.txt`.<br/>
+`/home/Downloads/ONT/CRR302667.fastq.gz` type the path to the ONT reads and save `read_list.txt`.<br/>
 `necat config arabidopsis_config.txt` create a config file template.<br/>
 `nano arabidopsis_config.txt` modify the config file with the relative information, e.g.:<br/>
 
@@ -381,6 +381,9 @@ Please note, a similar result may be obtained with [the Flye assembler](https://
 
 ## [Step 3 | Remove contaminants]
 <span style="color:black">
+In this step, we may need to remove contaminants, e.g., chloroplast, mitochondrial and/or bacterial sequences.<br/> 
+
+<span style="color:black">
 `ln -s /home/Assembly/nextDenovo/03.ctg_graph/01.ctg_graph.sh.work/ctg_graph1/nd.asm.p.fasta Assembly_NextDenovo_ONT_15_fragments.fasta` create a soft link for the assembly.<br/> 
 `egrep 'loop' Assembly_NextDenovo_ONT_15_fragments.fasta` check if the final assembly contains circular fragments:<br/>        
 <div class="alert alert-success">
@@ -399,14 +402,15 @@ We will remove these fragments from the assembly. Firstly, let's create a list w
 
 <div class="alert alert-info">
 <span style="color:black">
-Just out of curiosity, you may extract the looped sequences in the same manner and [BLAST them](https://blast.ncbi.nlm.nih.gov/Blast.cgi?PROGRAM=blastn&PAGE_TYPE=BlastSearch&LINK_LOC=blasthome).
+Just out of curiosity, you may extract the looped sequences in the same manner and [BLAST them](https://blast.ncbi.nlm.nih.gov/Blast.cgi?PROGRAM=blastn&PAGE_TYPE=BlastSearch&LINK_LOC=blasthome) to verify if these fragments do represent chloroplast, mitochondrial and bacterial sequences.
 </div>        
 </span>
 
 ## [Step 4 | NextPolish] 
 
 <span style="color:black">
-Now we will polish our assembly with HiFi reads.<br/>
+In order to improve the draft genome by searching misassemblies and other inconsistencies and correcting them, we will polish our assembly with the highly accurate long HiFi reads.<br/>
+
 <span style="color:black">
 `cd /home/` <br/>
 `mkdir Nextpolish` <br/>
@@ -824,7 +828,7 @@ There are several options to functionally annotate genomes. Here, I would like t
 ## [Step 1 | Qualimap]
 
 <span style="color:black">
-We will use [Qualimap](http://qualimap.conesalab.org/) to generate some statistics on our assembly.  
+We will use [Qualimap](http://qualimap.conesalab.org/) to (1) examine sequencing alignment data according to the features of the mapped reads and their genomic properties; (2) get an overall view of the data that may help in decision-making for further analysis.  
 
 <span style="color:black">
 `minimap2 -t 16 -ax map-ont A.thaliana_Scaffolded.fasta cns_final.fasta.gz > A.thaliana_Scaffolded.aligned.sam`<br/>
@@ -892,7 +896,7 @@ General error rate:&nbsp;&nbsp;&nbsp;&nbsp;1.55%<br/>
 ## [Step 2 | QUAST]
 
 <span style="color:black">
-We may also want to get some more stats on our assembly with [the QUality ASsessment Tool](http://quast.sourceforge.net/docs/manual.html) (QUAST).
+We may also use [the QUality ASsessment Tool](http://quast.sourceforge.net/docs/manual.html) (QUAST) to get a summary report on our genome as well as to assess the quality of this assembly based on a reference.
 
 <span style="color:black">
 `quast.py --output-dir quast A.thaliana_Scaffolded.fasta` gives an overview on our assembly.<br/>
@@ -1418,4 +1422,3 @@ Ch_2
 # Acknowledgements
 <span style="color:black">
 <p class="text-justify">I would like to express my gratitude to [Dr Guillem Ylla](https://ylla-lab.github.io/), the head of the laboratory of Bioinformatics and Genome Biology at the Jagiellonian University (Kraków, Poland), for providing the assistance, feedback and computing resources for this tutorial.</p>
-![](https://visitor-badge.deta.dev/badge?page_id=https://niwdoog.github.io/Genome_Assembly_Long_Reads_Hi-C/)

@@ -36,5 +36,5 @@ RepeatMasker<br/>
 [Step 7 | Circos]<br/>
 **Acknowledgements**<br/>
 
-[![DOI](https://zenodo.org/badge/543131281.svg)](https://zenodo.org/badge/latestdoi/543131281)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7125249.svg)](https://doi.org/10.5281/zenodo.7125249)
 ![](https://visitor-badge.deta.dev/badge?page_id=https://niwdoog.github.io/Genome_Assembly_Long_Reads_Hi-C/)

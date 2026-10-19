@@ -2,7 +2,7 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7125249.svg)](https://doi.org/10.5281/zenodo.7125249)
 [![GitHub Pages](https://img.shields.io/badge/Live-Interactive_Tutorial-2ea44f?logo=github)](https://niwdoog.github.io/Genome_Assembly_Long_Reads_Hi-C/)
-[![Visitors](https://api.visitorbadge.io/api/visitors?page_id=niwdoog.Genome_Assembly_Long_Reads_Hi-C&countColor=%23263759)](https://visitorbadge.io/status?page_id=niwdoog.Genome_Assembly_Long_Reads_Hi-C)
+[![Visitors](https://komarev.com/ghpvc/?username=niWdooG-Genome-Assembly&label=Visitors&color=0e75b6&style=flat)](https://github.com/niWdooG/Genome_Assembly_Long_Reads_Hi-C)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 > 📖 **Live Interactive Protocol & Tutorial:**  
